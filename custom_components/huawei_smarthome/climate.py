@@ -36,15 +36,19 @@ class HuaweiAdapterClimate(AdapterEntityMixin, ClimateEntity):
         self._attr_swing_modes = list(metadata.get("swing_modes", ()))
         self._attr_min_temp = metadata.get("min_temp")
         self._attr_max_temp = metadata.get("max_temp")
-        self._attr_temperature_unit = metadata.get(
+        self._attr_native_temperature_unit = metadata.get(
             "temperature_unit",
             UnitOfTemperature.CELSIUS,
         )
 
     @property
-    def current_temperature(self): return self._state_value("current_temperature")
+    def native_current_temperature(self):
+        return self._state_value("current_temperature")
+
     @property
-    def target_temperature(self): return self._state_value("target_temperature")
+    def native_target_temperature(self):
+        return self._state_value("target_temperature")
+
     @property
     def hvac_mode(self): return self._state_value("hvac_mode", self._attr_hvac_modes[0])
     @property
