@@ -32,7 +32,15 @@
       }
     },
     "error": {
-      "invalid_auth": "華為帳號或挑戰碼被拒絕。",
+      "invalid_credentials": "華為帳號或密碼錯誤，請檢查後重試。",
+      "invalid_auth": "華為挑戰碼錯誤，請檢查後重試。",
+      "account_not_found": "找不到華為帳號，請重新輸入。",
+      "account_verification_required": "您已啟用「帳號保護」，請驗證身分後完成登入。",
+      "region_not_supported": "所在區域不支援此服務，敬請見諒。",
+      "recovery_unavailable": "此帳號沒有綁定安全手機號碼或安全電子郵件地址，無法找回密碼。",
+      "risk_control": "偵測到操作可能存在安全風險，請稍後重試或使用其他驗證方式。",
+      "rate_limited": "操作過於頻繁，請稍後再試。",
+      "login_rejected": "華為拒絕了登入要求，請檢查帳號資訊或稍後再試。",
       "cannot_connect": "無法連線華為智慧生活。",
       "code_dispatch_failed": "華為未接受該通道的發碼請求。若登入帳號是使用者名稱或電子郵件，請改用繫結的手機號碼登入。",
       "home_required": "請至少選擇一個家庭。",
