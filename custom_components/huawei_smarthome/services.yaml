@@ -1,6 +1,6 @@
-voice_command:
-  name: Voice command
-  description: Send a natural-language command to a supported Huawei SmartHome speaker.
+speaker_action:
+  name: Xiaoyi voice
+  description: Use Xiaoyi to speak text or process a natural-language request on a supported Huawei SmartHome speaker.
   fields:
     device_id:
       name: Target device
@@ -11,15 +11,25 @@ voice_command:
           filter:
             integration: huawei_smarthome
           multiple: true
-    command:
-      name: Command
-      description: Natural-language command to send to the speaker assistant.
+    action:
+      name: Function
+      description: Choose text-to-speech or Xiaoyi voice assistant.
+      required: true
+      selector:
+        select:
+          translation_key: speaker_action
+          options:
+            - tts
+            - voice_command
+    text:
+      name: Text
+      description: Text to speak or natural-language command to execute.
       required: true
       selector:
         text: {}
     silent:
       name: Silent
-      description: Suppress the speaker's voice response while executing the command.
+      description: Suppress the voice response for natural-language commands; ignored for text-to-speech.
       default: true
       selector:
         boolean:

@@ -7,13 +7,16 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from .const import (
-    ATTR_COMMAND,
+    ATTR_ACTION,
     ATTR_SILENT,
+    ATTR_TEXT,
     CONF_ACCOUNT,
     CONF_SELECTED_HOME_IDS,
     DOMAIN,
     PLATFORMS,
-    SERVICE_VOICE_COMMAND,
+    SERVICE_SPEAKER_ACTION,
+    SPEAKER_ACTION_TTS,
+    SPEAKER_ACTION_VOICE_COMMAND,
 )
 from .device_registry import device_identifier
 
@@ -32,36 +35,51 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     from homeassistant.exceptions import HomeAssistantError
     import voluptuous as vol
 
-    async def handle_voice_command(call: ServiceCall) -> None:
+    async def handle_speaker_action(call: ServiceCall) -> None:
         target_ids = _target_ids(call.data.get(ATTR_DEVICE_ID))
         if not target_ids:
             raise HomeAssistantError(
-                f"{SERVICE_VOICE_COMMAND} requires a target device"
+                f"{SERVICE_SPEAKER_ACTION} requires a target device"
             )
-        contexts = _voice_command_contexts(hass, target_ids)
+        contexts = _target_contexts(hass, target_ids)
         if not contexts:
+            raise HomeAssistantError("no targeted Huawei SmartHome device found")
+        action = call.data[ATTR_ACTION]
+        text = call.data[ATTR_TEXT]
+        silent = call.data.get(ATTR_SILENT, True)
+        unsupported = tuple(
+            context.name
+            for context in contexts
+            if action not in context.speaker_capabilities()
+        )
+        if unsupported:
+            names = ", ".join(unsupported)
             raise HomeAssistantError(
-                "no targeted Huawei SmartHome device supports voice_command"
+                f"target device(s) do not support speaker action "
+                f"{action}: {names}"
             )
-        data = {
-            ATTR_COMMAND: call.data[ATTR_COMMAND],
-            ATTR_SILENT: call.data.get(ATTR_SILENT, True),
-        }
         await asyncio.gather(
             *(
-                context.async_run_service(SERVICE_VOICE_COMMAND, data)
+                context.async_send_speaker_action(
+                    action,
+                    text,
+                    silent=silent,
+                )
                 for context in contexts
             )
         )
 
-    if not hass.services.has_service(DOMAIN, SERVICE_VOICE_COMMAND):
+    if not hass.services.has_service(DOMAIN, SERVICE_SPEAKER_ACTION):
         hass.services.async_register(
             DOMAIN,
-            SERVICE_VOICE_COMMAND,
-            handle_voice_command,
+            SERVICE_SPEAKER_ACTION,
+            handle_speaker_action,
             schema=vol.Schema(
                 {
-                    vol.Required(ATTR_COMMAND): cv.string,
+                    vol.Required(ATTR_ACTION): vol.In(
+                        (SPEAKER_ACTION_TTS, SPEAKER_ACTION_VOICE_COMMAND)
+                    ),
+                    vol.Required(ATTR_TEXT): cv.string,
                     vol.Optional(ATTR_SILENT, default=True): cv.boolean,
                     vol.Required(ATTR_DEVICE_ID): vol.Any(
                         cv.string,
@@ -83,7 +101,7 @@ def _target_ids(value: Any) -> tuple[str, ...]:
     return ()
 
 
-def _voice_command_contexts(
+def _target_contexts(
     hass: HomeAssistant,
     target_ids: tuple[str, ...],
 ) -> tuple[Any, ...]:
@@ -104,8 +122,6 @@ def _voice_command_contexts(
                 identifiers={device_identifier(context.descriptor)}
             )
             if registered is None or registered.id not in target_set:
-                continue
-            if SERVICE_VOICE_COMMAND not in context.service_actions():
                 continue
             if context.key in seen:
                 continue
