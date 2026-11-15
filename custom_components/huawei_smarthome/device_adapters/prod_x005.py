@@ -20,14 +20,16 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from ..const import ATTR_COMMAND, ATTR_SILENT, SERVICE_VOICE_COMMAND
+from ..const import (
+    SPEAKER_ACTION_TTS,
+    SPEAKER_ACTION_VOICE_COMMAND,
+)
 from .api import EntitySpec
 from .context import DeviceContext
 
 _STATE_PLAYING = "playing"
 _STATE_PAUSED = "paused"
 _STATE_IDLE = "idle"
-_TTS_TONE_URL = "https://speaker-drcn.things.hicloud.com:9443/resource/silence.ogg"
 _PLAY_CONTROL_PREVIOUS = 2
 _PLAY_CONTROL_NEXT = 3
 _SPEAKER_STATE_FIELD = "speakerState"
@@ -116,49 +118,7 @@ async def _speak(context: DeviceContext, data: Mapping[str, Any]) -> None:
     message = data.get("message")
     if not isinstance(message, str) or not message:
         raise ValueError("notify message must be a non-empty string")
-    directive = json.dumps(
-        {
-            "command": {
-                "header": {
-                    "messageId": "",
-                    "name": "SetVoiceSpeech",
-                    "namespace": "Notifications",
-                },
-                "payload": {
-                    "asset": {"text": message, "tone": _TTS_TONE_URL},
-                    "ledProfile": 1,
-                    "loopCount": 1,
-                },
-            }
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    await context.async_send_service("communication", {"directive": directive})
-
-
-async def _voice_command(
-    context: DeviceContext,
-    data: Mapping[str, Any],
-) -> None:
-    """Send one natural-language command through the speaker assistant."""
-
-    command = data.get(ATTR_COMMAND)
-    if not isinstance(command, str) or not command.strip():
-        raise ValueError("voice command must be a non-empty string")
-    silent = data.get(ATTR_SILENT, True)
-    if not isinstance(silent, bool):
-        raise ValueError("voice command silent must be a boolean")
-    content = json.dumps(
-        {
-            "asr": command.strip(),
-            "source": "smarthome",
-            "noVui": int(silent),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    await context.async_send_service("speakerIfttt", {"content": content})
+    await context.async_send_tts(message)
 
 
 class ProductX005Adapter:
@@ -166,12 +126,15 @@ class ProductX005Adapter:
 
     prod_id = "X005"
 
-    def service_actions(self, context: DeviceContext) -> Mapping[str, Any]:
-        """Declare integration services supported by this product."""
+    def speaker_capabilities(self, context: DeviceContext) -> frozenset[str]:
+        """Declare speaker actions backed by the device Profile."""
 
-        if not context.has_service("speakerIfttt"):
-            return {}
-        return {SERVICE_VOICE_COMMAND: _voice_command}
+        capabilities: set[str] = set()
+        if context.has_service("communication"):
+            capabilities.add(SPEAKER_ACTION_TTS)
+        if context.has_service("speakerIfttt"):
+            capabilities.add(SPEAKER_ACTION_VOICE_COMMAND)
+        return frozenset(capabilities)
 
     def entities(self, context: DeviceContext) -> tuple[EntitySpec, ...]:
         if context.profile is None:

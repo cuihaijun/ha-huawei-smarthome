@@ -38,5 +38,11 @@ class HuaweiProductAdapter(Protocol):
 
     prod_id: str
 
+    def speaker_capabilities(
+        self,
+        context: "DeviceContext",
+    ) -> frozenset[str]:
+        """Return speaker actions supported by one device instance."""
+
     def entities(self, context: "DeviceContext") -> tuple[EntitySpec, ...]:
         """Return the entities for one device instance."""

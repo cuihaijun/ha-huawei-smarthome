@@ -88,6 +88,27 @@ https://github.com/duanyudan86/ha-huawei-smarthome
 
 配置完成后，在 Huawei SmartHome 设备页面查看已创建的实体。实体由设备的产品适配器决定；没有适配器的产品不会显示实体。当前支持范围请以[已接入设备清单](docs/supported-devices.md)为准。
 
+### 5. 小艺语音服务
+
+支持相关能力的音箱适配器会声明“小艺语音”能力。通过统一服务可以执行文字播报或自然语言命令：
+
+```yaml
+service: huawei_smarthome.speaker_action
+data:
+  device_id:
+    - <Home Assistant 设备 ID>
+  action: voice_command
+  text: "今天的天气"
+  silent: false
+```
+
+`action` 支持以下值：
+
+- `tts`：文字播报；`silent` 字段会被忽略。
+- `voice_command`：调用小艺语音助手执行自然语言命令；`silent: true` 时抑制语音响应。
+
+一次调用可以选择多个设备，但所有目标设备都必须声明所选能力；否则整个调用会被拒绝，不会只执行其中一部分设备。
+
 ## 产品适配器贡献
 
 欢迎拥有实际设备的用户贡献适配器。提交前请先检查[已接入设备清单](docs/supported-devices.md)，确认该 `prodId` 尚未接入。每个产品的适配器位于：

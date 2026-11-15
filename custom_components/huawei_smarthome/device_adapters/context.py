@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
+import json
 from typing import Any
 
 from ..domain.models import (
@@ -13,10 +14,17 @@ from ..domain.models import (
     is_older_remote_timestamp,
     parse_remote_timestamp,
 )
+from ..const import (
+    SPEAKER_ACTION_TTS,
+    SPEAKER_ACTION_VOICE_COMMAND,
+)
 from ..mqtt.commands import HuaweiCommandGateway
 from ..mqtt.protocol import decode_message
 from ..mqtt_client import HuaweiMqttClient
-from .api import EntityAction, EntitySpec, HuaweiProductAdapter
+from .api import EntitySpec, HuaweiProductAdapter
+
+
+_TTS_TONE_URL = "https://speaker-drcn.things.hicloud.com:9443/resource/silence.ogg"
 
 
 class DeviceContext:
@@ -77,25 +85,13 @@ class DeviceContext:
             return ()
         return self.adapter.entities(self)
 
-    def service_actions(self) -> Mapping[str, EntityAction]:
-        """Return adapter-declared integration service actions."""
+    def speaker_capabilities(self) -> frozenset[str]:
+        """Return speaker actions declared by the product adapter."""
 
-        provider = getattr(self.adapter, "service_actions", None)
+        provider = getattr(self.adapter, "speaker_capabilities", None)
         if provider is None:
-            return {}
-        return provider(self)
-
-    async def async_run_service(
-        self,
-        name: str,
-        data: Mapping[str, Any],
-    ) -> None:
-        """Run one adapter-declared integration service action."""
-
-        action = self.service_actions().get(name)
-        if action is None:
-            raise ValueError(f"adapter service is unavailable: {name}")
-        await action(self, data)
+            return frozenset()
+        return frozenset(provider(self))
 
     def has_service(self, sid: str) -> bool:
         if sid in self._state:
@@ -132,6 +128,79 @@ class DeviceContext:
             sid=sid,
             body=data,
         )
+
+    async def async_send_tts(self, message: str) -> None:
+        """Send a text-to-speech request through the speaker service."""
+
+        if not isinstance(message, str) or not message:
+            raise ValueError("tts message must be a non-empty string")
+        directive = json.dumps(
+            {
+                "command": {
+                    "header": {
+                        "messageId": "",
+                        "name": "SetVoiceSpeech",
+                        "namespace": "Notifications",
+                    },
+                    "payload": {
+                        "asset": {"text": message, "tone": _TTS_TONE_URL},
+                        "ledProfile": 1,
+                        "loopCount": 1,
+                    },
+                }
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        await self.command_gateway.async_send(
+            device_id=self.dev_id,
+            sid="communication",
+            body={"directive": directive},
+        )
+
+    async def async_send_voice_command(
+        self,
+        command: str,
+        *,
+        silent: bool = True,
+    ) -> None:
+        """Send a natural-language command through the speaker assistant."""
+
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError("voice command must be a non-empty string")
+        if not isinstance(silent, bool):
+            raise ValueError("voice command silent must be a boolean")
+        content = json.dumps(
+            {
+                "asr": command.strip(),
+                "source": "smarthome",
+                "noVui": int(silent),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        await self.command_gateway.async_send(
+            device_id=self.dev_id,
+            sid="speakerIfttt",
+            body={"content": content},
+        )
+
+    async def async_send_speaker_action(
+        self,
+        action: str,
+        text: str,
+        *,
+        silent: bool = True,
+    ) -> None:
+        """Send one declared speaker action to the cloud."""
+
+        if action == SPEAKER_ACTION_TTS:
+            await self.async_send_tts(text)
+            return
+        if action == SPEAKER_ACTION_VOICE_COMMAND:
+            await self.async_send_voice_command(text, silent=silent)
+            return
+        raise ValueError(f"unsupported speaker action: {action}")
 
     def add_state_listener(self, listener: Callable[[], None]) -> None:
         self._listeners.add(listener)
