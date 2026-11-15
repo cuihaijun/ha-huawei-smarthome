@@ -48,17 +48,17 @@ class HuaweiAdapterWaterHeater(AdapterEntityMixin, WaterHeaterEntity):
         self._attr_max_temp = metadata.get("max_temp")
         self._attr_target_temperature_step = metadata.get("target_temp_step")
         self._attr_operation_list = list(metadata.get("operation_modes", ()))
-        self._attr_temperature_unit = metadata.get(
+        self._attr_native_temperature_unit = metadata.get(
             "temperature_unit",
             UnitOfTemperature.CELSIUS,
         )
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         return self._state_value("current_temperature")
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         return self._state_value("target_temperature")
 
     @property
