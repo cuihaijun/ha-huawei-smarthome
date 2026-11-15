@@ -87,6 +87,33 @@ CAS_SMS_REQUEST_TYPE = "6"
 # because HttpResponse.headers is a flat mapping.
 SET_COOKIE_SEPARATOR = "\n"
 
+# These result-code groups mirror the SmartHome HMS.bundle login resources.
+_LOGIN_UI_ERROR_BY_RESULT_CODE = {
+    "70002001": "account_not_found",
+    "70002002": "invalid_credentials",
+    "70002003": "invalid_credentials",
+    "70002007": "recovery_unavailable",
+    "70002009": "recovery_unavailable",
+    "70002029": "recovery_unavailable",
+    "70002030": "code_dispatch_failed",
+    "70002039": "code_dispatch_failed",
+    "70002058": "code_dispatch_failed",
+    "70002067": "region_not_supported",
+    "70002068": "account_verification_required",
+    "70002069": "account_verification_required",
+    "70002071": "code_dispatch_failed",
+    "70002072": "account_verification_required",
+    "70002075": "cannot_connect",
+    "70002057": "invalid_credentials",
+    "70008800": "risk_control",
+    "70008804": "cannot_connect",
+    "70009032": "cannot_connect",
+    "70001104": "region_not_supported",
+    "70002040": "cannot_connect",
+    "1017": "cannot_connect",
+    "1025": "rate_limited",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class _PendingLogin:
@@ -219,17 +246,34 @@ class HuaweiSmartHomeAuthProvider:
         )
         fields = _parse_form(response.body)
         result_code = _first(fields, "resultCode")
+        if response.status >= 400:
+            _raise_login_http_error(response.status, "account login")
         if response.status < 400 and result_code == "0":
             return LoginStart(session=self._finish_login(account, fields))
+        if not fields:
+            raise AuthenticationError(
+                "Huawei SmartHome login response was empty",
+                ui_error="cannot_connect",
+                remote_code=str(response.status),
+            )
         channels = _extract_channels(fields)
         if not channels:
+            error_desc = _first(fields, "errorDesc")
+            ui_error = _login_ui_error(result_code, error_desc, challenge=False)
             _LOGGER.warning(
                 "Huawei SmartHome login rejected without a challenge: "
-                "status=%s resultCode=%s",
+                "status=%s resultCode=%s errorDesc=%s ui_error=%s",
                 response.status,
                 result_code,
+                error_desc,
+                ui_error,
             )
-            raise InvalidCredentialsError("Huawei SmartHome account login rejected")
+            raise InvalidCredentialsError(
+                "Huawei SmartHome account login rejected",
+                ui_error=ui_error,
+                remote_code=result_code,
+                remote_description=error_desc,
+            )
         selected = _default_channel(channels)
 
         self._pending = _PendingLogin(
@@ -435,13 +479,26 @@ class HuaweiSmartHomeAuthProvider:
             retry=True,
         )
         fields = _parse_form(response.body)
-        if response.status >= 400 or _first(fields, "resultCode") != "0":
+        result_code = _first(fields, "resultCode")
+        if response.status >= 400:
+            _raise_login_http_error(response.status, "challenge login")
+        if result_code != "0":
+            error_desc = _first(fields, "errorDesc")
+            ui_error = _login_ui_error(result_code, error_desc, challenge=True)
             _LOGGER.warning(
-                "Huawei SmartHome challenge rejected: status=%s resultCode=%s",
+                "Huawei SmartHome challenge rejected: "
+                "status=%s resultCode=%s errorDesc=%s ui_error=%s",
                 response.status,
-                _first(fields, "resultCode"),
+                result_code,
+                error_desc,
+                ui_error,
             )
-            raise InvalidCredentialsError("Huawei SmartHome challenge rejected")
+            raise InvalidCredentialsError(
+                "Huawei SmartHome challenge rejected",
+                ui_error=ui_error,
+                remote_code=result_code,
+                remote_description=error_desc,
+            )
         return self._finish_login(pending.account, fields)
 
     def _finish_login(
@@ -843,6 +900,63 @@ def _set_cookie_values(headers: Mapping[str, str]) -> list[str]:
 def _first(fields: Mapping[str, list[str]], key: str) -> str | None:
     values = fields.get(key)
     return values[0] if values else None
+
+
+def _raise_login_http_error(status: int, stage: str) -> None:
+    """Keep HTTP/service failures out of the invalid-credentials category."""
+
+    if status == 429:
+        raise TransientAuthenticationError(
+            f"Huawei SmartHome {stage} was rate limited",
+            ui_error="rate_limited",
+            remote_code=str(status),
+        )
+    if status == 403 or status >= 500:
+        raise TransientAuthenticationError(
+            f"Huawei SmartHome {stage} service is unavailable",
+            ui_error="cannot_connect",
+            remote_code=str(status),
+        )
+    raise AuthenticationError(
+        f"Huawei SmartHome {stage} request was rejected",
+        ui_error="login_rejected",
+        remote_code=str(status),
+    )
+
+
+def _login_ui_error(
+    result_code: str | None,
+    error_desc: str | None,
+    *,
+    challenge: bool,
+) -> str:
+    """Map known Huawei login responses to safe UI error keys."""
+
+    if challenge:
+        if result_code == "1025":
+            return "rate_limited"
+        if result_code == "70008800":
+            return "risk_control"
+        if result_code in {"70002075", "70008804", "70009032", "70002040", "1017"}:
+            return "cannot_connect"
+        return "invalid_auth"
+
+    mapped = _LOGIN_UI_ERROR_BY_RESULT_CODE.get(result_code or "")
+    if mapped is not None:
+        return mapped
+
+    text = (error_desc or "").lower()
+    if any(
+        marker in text
+        for marker in ("useraccount", "password", "account", "账号", "帐号", "密码")
+    ):
+        return "invalid_credentials"
+    if any(
+        marker in text
+        for marker in ("challenge", "verification", "verify", "vcode", "验证码")
+    ):
+        return "account_verification_required"
+    return "login_rejected"
 
 
 def _parse_form(body: bytes) -> dict[str, list[str]]:

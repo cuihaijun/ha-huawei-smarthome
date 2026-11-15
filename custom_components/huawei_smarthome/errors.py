@@ -14,6 +14,19 @@ class InvalidProtocolDataError(HuaweiSmartHomeError):
 class AuthenticationError(HuaweiSmartHomeError):
     """Authentication or token exchange failed."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        ui_error: str | None = None,
+        remote_code: str | None = None,
+        remote_description: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.ui_error = ui_error
+        self.remote_code = remote_code
+        self.remote_description = remote_description
+
 
 class InvalidCredentialsError(AuthenticationError):
     """The account or challenge code was rejected."""

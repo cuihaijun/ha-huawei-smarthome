@@ -75,7 +75,7 @@ class HuaweiSmartHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             account = str(user_input.get(CONF_ACCOUNT, "")).strip()
             password = str(user_input.get(CONF_PASSWORD, ""))
             if not account or not password:
-                errors["base"] = "invalid_auth"
+                errors["base"] = "invalid_credentials"
             else:
                 self._account = account
                 try:
@@ -90,8 +90,8 @@ class HuaweiSmartHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         identity_fingerprint=str(identity["identity_fingerprint"]),
                     )
                     result = await self._provider.async_begin_login(account, password)
-                except InvalidCredentialsError:
-                    errors["base"] = "invalid_auth"
+                except InvalidCredentialsError as error:
+                    errors["base"] = error.ui_error or "invalid_credentials"
                 except ValueError as error:
                     _LOGGER.warning(
                         "Huawei SmartHome client identity is unusable: %s",
@@ -100,10 +100,13 @@ class HuaweiSmartHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "cannot_connect"
                 except AuthenticationError as error:
                     _LOGGER.warning(
-                        "Huawei SmartHome account login failed: %s",
+                        "Huawei SmartHome account login failed: type=%s "
+                        "remote_code=%s ui_error=%s",
                         type(error).__name__,
+                        error.remote_code,
+                        error.ui_error,
                     )
-                    errors["base"] = "cannot_connect"
+                    errors["base"] = error.ui_error or "cannot_connect"
                 else:
                     if result.challenge is not None:
                         self._challenge = result.challenge
@@ -111,7 +114,7 @@ class HuaweiSmartHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if result.session is not None:
                         self._session = result.session
                         return await self._prepare_discovery()
-                    errors["base"] = "invalid_auth"
+                    errors["base"] = "invalid_credentials"
 
         return self.async_show_form(
             step_id="user",
@@ -188,13 +191,18 @@ class HuaweiSmartHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self._challenge_form("invalid_auth")
             try:
                 self._session = await self._provider.async_complete_challenge(code)
-            except InvalidCredentialsError:
-                return self._challenge_form("invalid_auth")
+            except InvalidCredentialsError as error:
+                return self._challenge_form(error.ui_error or "invalid_auth")
             except AuthenticationError as error:
                 _LOGGER.warning(
-                    "Huawei SmartHome challenge failed: %s",
+                    "Huawei SmartHome challenge failed: type=%s "
+                    "remote_code=%s ui_error=%s",
                     type(error).__name__,
+                    error.remote_code,
+                    error.ui_error,
                 )
+                if error.remote_code is not None:
+                    return self._challenge_form(error.ui_error or "cannot_connect")
                 return self.async_abort(reason="cannot_connect")
             return await self._prepare_discovery()
 

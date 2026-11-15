@@ -32,7 +32,15 @@
       }
     },
     "error": {
-      "invalid_auth": "The Huawei account or verification code was rejected.",
+      "invalid_credentials": "The Huawei account or password was rejected. Check them and try again.",
+      "invalid_auth": "The Huawei verification code was rejected. Check it and try again.",
+      "account_not_found": "The Huawei account could not be found. Check it and try again.",
+      "account_verification_required": "Huawei requires additional account verification before login.",
+      "region_not_supported": "This Huawei account region does not support Huawei SmartHome.",
+      "recovery_unavailable": "This account has no security phone or email for password recovery.",
+      "risk_control": "Huawei detected a security risk. Try again later or use another verification method.",
+      "rate_limited": "Too many attempts. Try again later.",
+      "login_rejected": "Huawei rejected the login request. Check your account details or try again later.",
       "cannot_connect": "Unable to connect to Huawei SmartHome.",
       "code_dispatch_failed": "Huawei did not accept the code request for this channel. If you signed in with a username or email address, sign in with the phone number bound to that account instead.",
       "home_required": "Select at least one home.",
